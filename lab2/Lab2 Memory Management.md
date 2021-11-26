@@ -152,6 +152,18 @@
 
 注意：即使我们可能没有( 2^32 - KERNBASE )字节的物理地址，但是也可以直接映射。
 
+# 看到了很牛逼的二级指针代码！！！！！！！
+
+![](将以高地址开头的链表调换顺序为低地址开头.png)
+
+page_free_list就是空闲页链表，但是它一开始是高地址在链表前面，低地址在后面，为了转换链表顺序，这里就使用了二级指针。
+
+当然，在做这个项目之前，我刷力扣也遇到了这种神仙代码，今日再见，依然难以看懂，5555。
+
+[力扣网址](https://leetcode-cn.com/problems/shan-chu-lian-biao-de-jie-dian-lcof/solution/linusda-lao-de-jie-jue-fang-an-by-adjwang/)
+
+[Linux源码](http://wordaligned.org/articles/two-star-programming)
+
 # 总结
 该实验大体上做三件事：
 

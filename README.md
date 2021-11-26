@@ -36,6 +36,8 @@ https://pdos.csail.mit.edu/6.828/2018/readings/i386/toc.htm
 调用门与特权级（CPL、DPL和RPL）：由于本实验没有相关知识，所以在这里补充一些资料
 https://www.cnblogs.com/chenwb89/p/operating_system_004.html
 
+计算机原理
+http://chuquan.me/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA%E5%8E%9F%E7%90%86/
 
-
-
+CR寄存器
+https://blog.csdn.net/whatday/article/details/24851197
