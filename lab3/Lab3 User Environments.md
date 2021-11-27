@@ -324,9 +324,24 @@ X86处理器内部生成的所有同步异常都使用0到31之间的中断向�
 
 ![](12.png)
 
+比如lab/user/hello.c的umain函数只有如下两行代码
+
+    cprintf("hello, world\n");
+    cprintf("i am environment %08x\n", thisenv->env_id);
+
+其流程实际为：
+
+    umain --> lib/cprintf --> vcprintf --> lib/systemcall/sys_cputs --> syscall，systemcall 中使用 int 0x30 陷入内核态
+
 ---
 
 ## 看到别人实现的部分骚操作（不过影响可读性和可拓展性？）
+
+宏定义关于 # 和 ## 和 #@ 的相关资料：
+
+https://blog.csdn.net/wsclinux/article/details/50013973
+https://blog.csdn.net/viven_hui/article/details/117331811
+https://blog.csdn.net/qq_39987383/article/details/106525465
 
 重点关注它的头文件和宏定义的使用。
 
@@ -431,8 +446,8 @@ trapentry.S里的一堆宏是没办法压缩的，但能通过一些方法压缩
 4. 随后主引导程序会load内核。会把内核load到0x10000处
 5. 随后到内核执行，内核调用i386_init随即转移到c语言中
 6. 在i386_init中我们要调用各种初始化。有lab1实现的cons_init和lab2实现的mem_init
-7. 以及partA实现的env_init()、和刚才实现的trap_init。
-8. 随后我们要调用env_run不过在调用env_run之前要先ENV_CREATE(user_hello, ENV_TYPE_USER);
+7. 以及lab3实现的env_init和trap_init。
+8. 随后我们要调用env_run不过在调用env_run之前要先调用ENV_CREATE(user_hello, ENV_TYPE_USER)。
 9. ENV_CREATE根据提供的二进制elf文件创建一个env。
 10. 随后调用env_run执行我们刚才创建的env(这个时候我们只有一个env)
 11. 这个时候我们进入env_run继续跟踪。在调用env_pop_tf之前我们输出当前的env_tf
@@ -444,7 +459,7 @@ trapentry.S里的一堆宏是没办法压缩的，但能通过一些方法压缩
     
     ![](9.png)
 
-14. 随后调用libmain然后进入libmain.c。在此调用umain(argc, argv);进入user routine。如果是shell的话就会进入shell
+14. 随后调用libmain然后进入lib/libmain.c。在此调用umain(argc, argv);进入user routine。如果是shell的话就会进入shell
 15. 这里我们测试用的是一个hello.c在里面我们会cprinf很多东西，而cprinf会陷入系统调用。
 16. 这里我们直接在obj/user/hello.asm去找一下系统调用的地址吧。。一行一行执行好慢。。。。
 17. 这里通过系统调用我们就会陷入
@@ -461,16 +476,23 @@ trapentry.S里的一堆宏是没办法压缩的，但能通过一些方法压缩
     因此这里我们进入TRAPHANDLER_NOEC的宏定义。因为syscall是没有error number所以我们进入这个宏定义
 
 18. 进入之后把trap number入栈随即调用trap这个函数
-19. 对于trap的实现后面的lab涉及到了之后在进行整理
+19. 对于trap的实现是后面的lab了,之后在进行整理
 
 # Part B: Page Faults, Breakpoints Exceptions, and System Calls
 
+## Handling Page Faults
 
+当页面错误（page fault，中断向量14）发生时，处理器将导致故障的线性地址（虚拟地址）存放在特殊寄存器cr2中。
 
+---
 
+## The Breakpoint Exception
 
+断点异常（breakpoint，中断向量3）常被调试器用来在程序的断点处，以特殊的1字节int 3软件中断指令替换相关程序指令，从而在程序代码中插入断点。在JOS中我们会把这个异常转化为一个原始伪系统调用以便任何用户环境都能调用到JOS的内核monitor。如果我们认为Jos内核监视器是一个原始调试器，这种用法实际上是合适的。
 
+---
 
+## System calls
 
 
 
