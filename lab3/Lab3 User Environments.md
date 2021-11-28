@@ -7,7 +7,7 @@
 
 注意：本实验指的用户环境和UNIX中的进程是一个概念！！！！！！！之所有没有使用进程是强调JOS的用户环境和UNIX进程将提供不同的接口。
 
-# Part A: User Environments
+# Part A: User Environments and Exception Handling
 
     typedef int32_t envid_t; //用户环境ID变量，32位的。
 
@@ -143,9 +143,45 @@ env_create内部函数调用
 
 一旦你完成上述函数（除了trap_init）的代码，并且在QEMU下编译运行，系统会进入用户空间，并且开始执行hello程序，直到它做出一个系统调用指令int。但是这个系统调用指令不能成功运行，因为到目前为止，JOS还没有设置相关硬件来实现从用户态向内核态的转换功能。当CPU发现，它没有被设置成能够处理这种系统调用中断时，它会触发一个保护异常，然后发现这个保护异常也无法处理，从而又产生一个错误异常，然后又发现仍旧无法解决问题，所以最后放弃，我们把这个叫做"triple fault"。通常来说，接下来CPU会复位，系统会重启。
 
-# Part B: Handling Interrupts and Exceptions
+---
 
-注意：在这个实验中，我们通常引用Intel关于中断、异常等的术语。但是，异常、陷入、中断、出错和终止（exception, trap, interrupt, fault and abort）等术语在体系结构或操作系统之间没有标准意义，而且在特定体系结构(如x86)上使用时往往忽略它们之间的细微区别。当你在实验之外看到这些术语时，其含义可能会略有不同。
+## Handling Interrupts and Exceptions
+
+注意：在这个实验中，我们通常引用Intel关于中断、异常等的术语。但是，异常、陷入、中断、出错和终止（exception, trap, interrupt, fault and abort）等术语在体系结构或操作系统之间没有标准意义，而且在特定体系结构(如x86)上使用时往往忽略它们之间的细微区别。当你在实验之外看到这些术语时，其含义可能会略有不同。比如以下参考似乎就不同。
+
+> Interrupt是Asynchronous exception，由时钟、I/O等外部事件引发；system call是Synchronous exception，是在执行特定指令后故意触发的。
+> 
+> Exception(异常)即是指对于一些特定event（事件），运行指令由user code切换至kernel code的过程。在kernel code中，会由专门的exception handler（异常处理程序）来处理异常。
+> 
+> ![](13.jpg)
+> 
+> Exception可以分为四种种类：interrupts，traps（syscall），faults和aborts。
+> | Class | Cause | Async/Sync | Return behavior |
+> | :----: | :----: | :----: | :----: |
+> | Interrupt | Signal from I/O device | Async | Always returns to next instruction |
+> | Trap | Intentional exception | Sync | Always returns to next instruction |
+> | Fault | Potentially recoverable error | Sync | Might return to current instruction |
+> | Abort | Nonrecoverable error | Sync | Never returns |
+> 
+> Interrupt：这种类型的exception不可以打断正在执行的指令，必须等到这条指令完成后才可以对interrupt作出反应（而其他三种却可以打断正在执行的指令）。是由I/O设备、时钟等外部设备触发的异步异常。比如时钟芯片触发的中断，键盘按下Ctrl+C等。
+> 
+> Traps：是为了执行指令而故意引发的异常。其最重要的用途是在用户程序和内核之间提供类似过程的接口，称为系统调用。比如我们需要打印一些信息到command line窗口，在执行这个打印指令时就触发一个异常，然后 system call 打印函数以打印信息到命令行窗口。而system call是作为user program和kernel之间的接口，使得用户可以使用fork(), read()等函数来调用kernel services。
+> 
+> fault：我们在virtual memory中遇到的page fault就会触发fault exception，然后exception handler 进行page in操作，将缺失的page从disk搬移到main memory 。所以fault异常一般需要exception handler进行一定的处理以重新正确执行当前指令。
+> 
+> abort：不可恢复的致命错误会导致abort异常，一般是硬件故障。abort的异常handler会终止当前程式。
+> 
+> 每一个异常（不是每一种异常）都会有异常号，一部分异常的异常号由处理器设计者给定，一部分由OS kernel的设计者给定。比如在IA32 system中，共有256个异常，前32个，0-31，由intel architect给定，后面的由OS给定，如下图所示。
+> 
+> ---
+> 
+> References:
+> 
+> * CSAPP 3e, Chapter 8 Exceptional Control Flow
+> 
+> * CMU's 15-213 slide
+> 
+> * https://www.cnblogs.com/midhillzhou/p/5620831.html
 
 ## Basics of Protected Control Transfer
 
@@ -435,48 +471,6 @@ trapentry.S里的一堆宏是没办法压缩的，但能通过一些方法压缩
 
 所有.data节会合并。每次宏展开时，.data 段里的 .long name 会合并到 funs 里作为函数数组，因此在 trap_init 里用 extern char funs[] 然后用 funs[i] 作为每个函数地址访问即可。对于几个空缺的中断号，以及结尾，可以插入 .long -1 或 .long 0 之类的进行辨别，然后在循环中根据 funs[i] 的值特殊处理。
 
----
-
-## partA整理
-
-1. 首先计算机的开始是从BIOS开始,BIOS会做一些关于硬件的检查，以及初始化之后。它搜索可引导设备，如软盘，硬盘驱动器或CD-ROM。 最终，当它找到可启动磁盘时，BIOS将引导加载程序从磁盘读取。随后转移到引导启动程序上去。
-2. 而主引导程序所在地址就是0x7c00也就是boot/boot.S
-3. 主引导程序会把处理器从实模式转换为32bit的保护模式，因为只有在这种模式下软件可以访问超过1MB空间的内容。
-4. 随后主引导程序会load内核。会把内核load到0x10000处
-5. 随后到内核执行，内核调用i386_init随即转移到c语言中
-6. 在i386_init中我们要调用各种初始化。有lab1实现的cons_init和lab2实现的mem_init
-7. 以及lab3实现的env_init和trap_init。
-8. 随后我们要调用env_run不过在调用env_run之前要先调用ENV_CREATE(user_hello, ENV_TYPE_USER)。
-9. ENV_CREATE根据提供的二进制elf文件创建一个env。
-10. 随后调用env_run执行我们刚才创建的env(这个时候我们只有一个env)
-11. 这个时候我们进入env_run继续跟踪。在调用env_pop_tf之前我们输出当前的env_tf
-    ![](7.png)
-
-12. 进入env_pop_tf之后我们把当前的env_tf存取trapframe中.然后执行iret指令进入用户态
-13. 用户态的第一条指令就是label start in lib/entry.S ，首先会比较一下esp寄存器的值是否小于用户栈。因为这表示我们已经处于用户态。
-    ![](8.png)
-    
-    ![](9.png)
-
-14. 随后调用libmain然后进入lib/libmain.c。在此调用umain(argc, argv);进入user routine。如果是shell的话就会进入shell
-15. 这里我们测试用的是一个hello.c在里面我们会cprinf很多东西，而cprinf会陷入系统调用。
-16. 这里我们直接在obj/user/hello.asm去找一下系统调用的地址吧。。一行一行执行好慢。。。。
-17. 这里通过系统调用我们就会陷入
-    ![](10.png)
-
-    可以发现这里就是我们刚才设置的对于syscall的处理。
-
-    这里是如何准备准确的找到trapentry.S中对应的条目，是通过我们在前面trap_init设置好的IDT表来找到对应的entry
-
-    所以通过IDT和我们设置的段选择子(其实这里就是内核的代码段)以及偏移就可以找到对应的中断处理程序。
-
-    ![](11.png)
-
-    因此这里我们进入TRAPHANDLER_NOEC的宏定义。因为syscall是没有error number所以我们进入这个宏定义
-
-18. 进入之后把trap number入栈随即调用trap这个函数
-19. 对于trap的实现是后面的lab了,之后在进行整理
-
 # Part B: Page Faults, Breakpoints Exceptions, and System Calls
 
 ## Handling Page Faults
@@ -601,25 +595,81 @@ trapentry.S里的一堆宏是没办法压缩的，但能通过一些方法压缩
 
     当递归返回，到trap_dispatch()返回时，trap()会调用env_run(curenv)；该函数会将 curenv->env_tf 结构中保存的寄存器快照重新恢复到寄存器中，这样又会回到用户程序系统调用之后的那条指令运行（在本例中，就算打印完字符之后的第一条指令），只是这时候已经执行了系统调用并且寄存器eax中保存着系统调用的返回值。任务完成重新回到用户模式CPL=3。
 
-    我一开始很疑惑，在整个过程，好像没有改变什么全局变量来标记现在是用户态还是内核态？那是因为内核态和用户态区别在于权限级别，而调用门实现了在不同特权级之间实现受控的程序控制转移的功能，调用门通常仅用于使用特权级保护机制的操作系统中。
-
-    所以当前 Env 的 Trapframe 结构的 tf_cs 的前两位始终都是1，也就是用户级别权限。用户想要系统调用，那么只能通过调用门，在不改变当前进程的权限的情况下（如果系统调用会改变当前进程权限，那进程岂不是可以趁着这段时间为所欲为！！），辅助实现系统调用（也就是暂时进入了内核态，拥有了小部分用户态没有的权限）。
+    Trapframe 结构的 tf_cs 的低2位表示当前运行的代码的访问权限级别，0代表是内核态，3代表是用户态。在整个递归过程中，curenv的tf_cs是在改变的。
     
 ---
 
 ## User-mode startup
 
+用户进程从lib/entry.S开始运行。在进行一些初始化后，调用lib/libmain.c的libmain()，它设置用户环境指向当前环境，设置用户进程的名称，并调用umain()进入用户进程的主函数。
 
+---
 
+## Page faults and memory protection
 
+举一个可修复的 fault 的例子：考虑一个可自动扩展的堆栈。很多操作系统中，内核为用户程序分配单个页面作为栈区，如果程序想要访问这个栈区以外的空间则会触发异常，操作系统自动为其分配更大的空间保证用户程序继续执行。通过这种做法，操作系统实际上只分配程序需要的栈内存量，但程序会觉得自己能在任意大的堆栈下执行。
 
+系统调用也为内存保护带来问题：大部分系统调用接口让用户程序传递一个指针参数给内核。这些指针指向的是用户读的缓存区或写的缓冲区。通过这种方式，系统调用在执行时就可以读写这些指针指向的数据。但是这里有两个问题：
 
+在内核中发生的页面错误可能比用户态下发生的页面错误严重的多。如果内核在操纵它私有的数据结构时发生了页面错误，那么这是一个内核BUG，异常处理程序应该终止整个系统的运行。但如果这个指针来自用户，操作系统就需要分辨出这个异常是在引用用户数据时造成的
 
+内核比用户拥有更高的访问权限。用户程序传递给内核的指针指向的数据可能是内核有权访问但用户无权访问的，因此内核必须小心读写指针指向的数据，防止将重要信息泄露给用户或者破坏内核的完整性。
 
+针对这两点，我们之前写的中断处理和系统调用还存在一些问题：
+* 处理页面错误时没有针对发生异常的是用户态还是内核态做特殊处理（利用tf_cs检测执行权）
+* 系统调用sys_cputs()中没有进行权限检测（实现user_mem_check()）
 
+# 本章总结
 
+1. 进程建立，可以加载用户ELF文件并执行。
+   1. 内核维护一个名叫envs的Env数组，每个Env结构对应一个进程，Env结构最重要的字段有Trapframe env_tf（该字段中断发生时可以保持寄存器的状态），pde_t *env_pgdir（该进程的页目录地址）。进程对应的内核数据结构可以用下图总结：
+   ![](13.png)
 
+   2. 定义了env_init()，env_create()等函数，初始化Env结构，将Env结构Trapframe env_tf中的寄存器值设置到寄存器中，从而执行该Env。
 
+2. 创建异常处理函数，建立并加载IDT，使JOS能支持中断处理。要能说出中断发生时的详细步骤。需要搞清楚内核态和用户态转换方式：通过中断机制可以从用户环境进入内核态。使用iret指令从内核态回到用户环境。中断发生过程以及中断返回过程和系统调用原理可以总结为下图：
+![](14.png)
 
+3. 利用中断机制，使JOS支持系统调用。要能说出遇到int 0x30这条系统调用指令时发生的详细步骤。见上图。
 
+# 前三章总结
+
+1. 首先计算机的开始是从BIOS开始,BIOS会做一些关于硬件的检查，以及初始化之后。它搜索可引导设备，如软盘，硬盘驱动器或CD-ROM。 最终，当它找到可启动磁盘时，BIOS将引导加载程序从磁盘读取。随后转移到引导启动程序上去。
+2. 而主引导程序所在地址就是0x7c00也就是boot/boot.S
+3. 主引导程序会把处理器从实模式转换为32bit的保护模式，因为只有在这种模式下软件可以访问超过1MB空间的内容。
+4. 随后主引导程序会load内核。会把内核load到0x10000处
+5. 随后到内核执行，内核调用i386_init随即转移到c语言中
+6. 在i386_init中我们要调用各种初始化。有lab1实现的cons_init和lab2实现的mem_init
+7. 以及lab3实现的env_init和trap_init。
+8. 随后我们要调用env_run不过在调用env_run之前要先调用ENV_CREATE(user_hello, ENV_TYPE_USER)。
+9. ENV_CREATE根据提供的二进制elf文件创建一个env。
+10. 随后调用env_run执行我们刚才创建的env(这个时候我们只有一个env)
+11. 这个时候我们进入env_run继续跟踪。在调用env_pop_tf之前我们输出当前的env_tf
+    ![](7.png)
+
+12. 进入env_pop_tf之后我们把当前的env_tf存取trapframe中.然后执行iret指令进入用户态
+13. 用户态的第一条指令就是label start in lib/entry.S ，首先会比较一下esp寄存器的值是否小于用户栈。因为这表示我们已经处于用户态。
+    ![](8.png)
+    
+    ![](9.png)
+
+14. 随后调用libmain然后进入lib/libmain.c。在此调用umain(argc, argv);进入user routine。如果是shell的话就会进入shell
+15. 这里我们测试用的是一个hello.c在里面我们会cprinf很多东西，而cprinf会陷入系统调用。
+16. 这里我们直接在obj/user/hello.asm去找一下系统调用的地址吧。。一行一行执行好慢。。。。
+17. 这里通过系统调用我们就会陷入
+    ![](10.png)
+
+    可以发现这里就是我们刚才设置的对于syscall的处理。
+
+    这里是如何准备准确的找到trapentry.S中对应的条目，是通过我们在前面trap_init设置好的IDT表来找到对应的entry
+
+    所以通过IDT和我们设置的段选择子(其实这里就是内核的代码段)以及偏移就可以找到对应的中断处理程序。
+
+    ![](11.png)
+
+    因此这里我们进入TRAPHANDLER_NOEC的宏定义。因为syscall是没有error number所以我们进入这个宏定义。
+
+18. 进入之后把trap number入栈随即调用trap这个函数，进入内核态。
+19. 进入内核态后，我们就能够做一些用户态不能做的事情（比如控制台打印），当然还要检查当前内核态权限（当前是否是内核态）、页是否存在（是否访问有效地址）、页访问权限（是否有权限访问某地址）。（注意：进入内核态之后，对每个用户态传来的指针，都要检查指针指向的地址是否有权限访问）
+20. 做完事情，返回到trap函数，trap函数后面的代码会调用env_run(curenv)；该函数会将 curenv->env_tf 结构中保存的寄存器快照重新恢复到寄存器中，这样又会回到用户程序系统调用之后的那条指令运行（在本例中，就算打印完字符之后的第一条指令），只是这时候已经执行了系统调用并且寄存器eax中保存着系统调用的返回值。任务完成重新回到用户模式CPL=3，也就是回到第15点的hello.c的cprintf函数后面继续执行。
 

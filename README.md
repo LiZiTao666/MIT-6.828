@@ -41,3 +41,10 @@ http://chuquan.me/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA%E5%8E%9F%E7%90%86/
 
 CR寄存器
 https://blog.csdn.net/whatday/article/details/24851197
+
+清华的操作系统课的知识点总结（课咋样我不知道，反正这知识点总结得肯定比我好多了）
+https://www.cnblogs.com/wuhualong/p/tsinghua_os_mooc_01_04.html
+https://www.cnblogs.com/wuhualong/p/tsinghua_os_mooc_05_07.html
+
+
+
