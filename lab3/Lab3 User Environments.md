@@ -2,7 +2,7 @@
 本文主要介绍JOS中的进程，异常处理，系统调用。内容上分为三部分：
 
 1. 用户环境建立，可以加载用户ELF文件并执行。（目前还没有文件系统，需要在内核代码硬编码需要加载的用户程序）
-2. 建立异常处理机制，异常发生时能从用户态进入内核进行处理，然后返回用户态。
+2. 建立异常处理机制，异常发生时能从用户态进入内核态进行处理，然后返回用户态。
 3. 借助异常处理机制，提供系统调用的能力。
 
 注意：本实验指的用户环境和UNIX中的进程是一个概念！！！！！！！之所有没有使用进程是强调JOS的用户环境和UNIX进程将提供不同的接口。
@@ -149,7 +149,6 @@ env_create内部函数调用
 
 ## Basics of Protected Control Transfer
 
-
 异常(Exception)和中断(Interrupts)都是“受到保护的控制转移方法”，都会使处理器从用户态转移为内核态（CPL = 0），而不给用户模式代码任何机会来干扰内核或其他环境的运行。在Intel的术语中，中断指的是由外部异步事件引起的处理器控制权转移，比如外部IO设备发送来的中断信号。相反，异常则是由于当前正在运行的指令所带来的同步的处理器控制权的转移，比如访问无效内存，或者除零溢出。
 
 为了确保这些控制转移能够真正被保护起来，需要设计处理器的中断/异常机制，使当前在中断或异常发生时运行的代码不能任意选择内核输入的位置或方式。在x86上，有两种机制配合工作来提供这种保护：
@@ -245,7 +244,7 @@ X86处理器内部生成的所有同步异常都使用0到31之间的中断向�
 
 ## Nested Exceptions and Interrupts (Nested意为嵌套)
 
-处理器在用户态下和内核态下都可以处理异常和中断。但是，只有当从用户模式进入内核模式时，x86处理器才会自动切换堆栈，然后将其旧的寄存器状态压入堆栈，并通过IDT调用相应的异常处理函数。如果当中断或异常发生时，处理器已经处于内核模式(CS寄存器的低2位已经为零)，那么CPU只需在同一个内核堆栈上压入更多的值。这样，内核就可以优雅地处理由内核内部代码引起的嵌套异常。此功能是实现保护的重要工具，我们将在后面关于系统调用的部分中看到这一点。
+处理器在用户态下和内核态下都可以处理异常和中断。但是，只有当从用户模式进入内核模式时，x86处理器才会自动切换堆栈，然后将其旧的寄存器状态压入堆栈，并通过IDT调用相应的异常处理函数。如果当中断或异常发生时，处理器已经处于内核模式(CS寄存器的低2位已经为零)，那么CPU只需在同一个内核堆栈上压入更多的值，而我们在trap函数写的代码也不用将 Trapframe 的值赋值给当前 Env 的 Trapframe 。这样，内核就可以优雅地处理由内核内部代码引起的嵌套异常。此功能是实现保护的重要工具，我们将在后面关于系统调用的部分中看到这一点。
 
 如果处理器已经处于内核模式，并遇到嵌套异常，因为它不需要切换堆栈，所以它不会保存旧的SS或ESP寄存器。如果这个异常类型不压入错误码，内核堆栈在进入异常处理程序时如下所示：
 
@@ -318,7 +317,7 @@ X86处理器内部生成的所有同步异常都使用0到31之间的中断向�
 * 陷阱（trap）：中断返回后执行下一条指令（一般用于用户自发地陷入内核态，比如断点）
 * 中止（abort）：严重的系统错误，程序中止
 
-实现过程中还要了解 [调用门与特权级（CPL、DPL和RPL）]([a](https://www.sogou.com/link?url=hedJjaC291P3yGwc7N55kLSc2ls_Ks2xBIuHGP7w_4_FhY5hlHmeTDRiRCrOLKtCyKeAKLCyJm3TO13urmeXqg))，注意调用门可以安装在GDT或者LGT中，但是不能安装在IDT中，所以我们实现的时候，要加上特权级参数作为函数参数。
+实现过程中还要了解 [调用门与特权级（CPL、DPL和RPL）](https://www.cnblogs.com/chenwb89/p/operating_system_004.html)，注意调用门可以安装在GDT或者LGT中，但是不能安装在IDT中，所以我们实现的时候，要加上特权级作为函数参数。
 
 总的流程如下
 
@@ -493,6 +492,128 @@ trapentry.S里的一堆宏是没办法压缩的，但能通过一些方法压缩
 ---
 
 ## System calls
+
+用户进程利用系统调用请求内核为它完成一些操作。当用户进程发起系统调用，处理器进入内核态，处理器和内核将保存当前用户进程的上下文状态，内核执行相应代码实现系统调用，然后返回继续执行用户进程的代码。用户如何向内核发起系统调用以及某个特定系统调用的具体用途在不同的操作系统中有很多不同的实现方式。
+
+在JOS系统中，我们会采用int指令触发一个处理器的中断。特别的，我们使用int $0x30作为系统调用中断。我们定义其中断向量为48（0x30），然后需要在中断向量表中初始化它的中断号和入口函数。这个中断不会被硬件触发，所以由用户代码触发中断不会引起歧义。
+
+用户程序会通过寄存器向内核传递系统调用号和参数，这样内核就不需要从用户的堆栈或指令流中获取参数了。
+
+* 系统调用号放在%eax
+* 参数（最多五个）分别放在%edx, %ecx, %ebx, %edi, %esi
+* 内核的返回值放在%eax
+
+### Exercise 7（记录这个练习的原因是，这个练习算是较为完整的系统调用流程）
+
+如果现在运行的是内核态的程序的话，此时调用了一个系统调用，比如 sys_cputs 函数时，此时不会触发中断，那么系统会直接执行定义在 lib/syscall.c 文件中的 sys_cputs，我们可以看一下这个文件，可以发现这个文件中定义了几个比较常用的系统调用，包括 sys_cputs, sys_cgetc 等等。我们还会发现他们都是统一调用一个 syscall 函数，通过这个函数的代码发现其实它是执行了一个汇编指令。所以最终是这个函数完成了系统调用。 
+
+但是如果是用户态程序呢？这个练习就是让我们编写程序使我们的用户程序在调用系统调用时，最终也能经过一系列的处理最终去执行 lib/syscall.c 中的 syscall 指令。
+
+让我们看一下这个过程，当用户程序中要调用系统调用时，比如 sys_cputs，从它的汇编代码中我们会发现，它会执行一个 int $0x30 指令，这个指令就是软件中断指令，这个中断的中断号就是 0x30，即 T_SYSCALL，所以题目中让我们首先为这个中断号编写一个中断处理函数，我们首先就要在 kern/trapentry.S 文件中为它声明它的中断处理函数，即TRAPHANDLER_NOEC，就像我们为其他中断号所做的那样。　
+
+    kern/trapentry.S
+    .....
+    TRAPHANDLER_NOEC(t_fperr, T_FPERR)
+    TRAPHANDLER(t_align, T_ALIGN)
+    TRAPHANDLER_NOEC(t_mchk, T_MCHK)
+    TRAPHANDLER_NOEC(t_simderr, T_SIMDERR)
+
+    TRAPHANDLER_NOEC(t_syscall, T_SYSCALL)
+
+    _alltraps
+    ....
+
+然后在trap.c 文件中声明 t_syscall() 函数。并且在 trap_init() 函数中为它注册
+
+    kern/trap.c
+    
+    void
+    trap_init(void)
+    {
+        extern struct Segdesc gdt[];
+
+        ....
+        void t_fperr();
+        void t_align();
+        void t_mchk();
+        void t_simderr();
+
+        void t_syscall();
+        .....
+
+        SETGATE(idt[T_ALIGN], 0, GD_KT, t_align, 0);
+        SETGATE(idt[T_MCHK], 0, GD_KT, t_mchk, 0);
+        SETGATE(idt[T_SIMDERR], 0, GD_KT, t_simderr, 0);
+
+        SETGATE(idt[T_SYSCALL], 0, GD_KT, t_syscall, 3);
+        // Per-CPU setup 
+        trap_init_percpu();
+    }
+
+此时当系统调用中断发生时，系统就可以捕捉到这个中断了，中断发生时，系统会调用 _alltraps 代码块，并且最终来到 trap() 函数处，进入trap函数后，经过一系列处理进入 trap_dispatch 函数， 该函数根据中断向量调用 syscall 函数。题目中要求此时我们需要去调用 kern/syscall.c 中的syscall函数，这里注意，这个函数可不是 lib/syscall.c 中的 syscall 函数，但是通过阅读 kern/syscall.c 中的 syscall 程序我们发现，它的输入和 lib/syscall.c 中的 syscall 很像，如下
+
+    kern/syscall.c 中的 syscall ：
+    int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
+
+    lib/syscall.c 中的 syscall ：
+    static inline int32_t syscall(int num, int check, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
+
+所以我们可以假象一下，是不是 lib/syscall.c 中的 syscall 就是一个外壳函数，它的存在就是为了能够调用 kern/syscall.c 的呢？ 我们再继续观察 kern/syscall.c 中的其他函数，会惊人的发现，kern/syscall.c 中的所有函数名和 lib/syscall.c 中的所有函数名都是一样的，只是实现方式不一样。拿 sys_cputs 函数举例。
+
+    kern/syscall.c
+    static void sys_cputs(const char *s, size_t len)
+    {
+        // Check that the user has permission to read memory [s, s+len).
+        // Destroy the environment if not:.
+
+        // LAB 3: Your code here.
+        user_mem_assert(curenv, s, len, 0);
+        // Print the string supplied by the user.
+        cprintf("%.*s", len, s);
+    }
+
+    lib/syscall.c
+    void sys_cputs(const char *s, size_t len)
+    {
+        syscall(SYS_cputs, 0, (uint32_t)s, len, 0, 0, 0);
+    }
+
+可见在 lib/syscall.c 中，是直接调用 lib/syscall.c/syscall 函数, 把相应参数传给 AX ,DX, CX, BX, DI, SI，然后进行系统调用中断，进入内核态，并且调用 kern/syscall.c/syscall 函数。
+
+所以剩下的就是我们如何在 kern/syscall.c 中的 syscall() 函数中正确的调用 sys_cputs 函数了，当然 kern/syscall.c 中其他的函数也能完成这个功能。所以我们必须根据触发这个系统调用的指令到底想调用哪个系统调用来确定我们该调用哪个函数。
+
+那么怎么知道这个指令是要调用哪个系统调用呢？答案是根据 syscall 函数中的第一个参数，syscallno，那么这个值其实要我们手动传递进去的，这个值存在哪里？通过阅读 lib/syscall.c 中的syscall函数我们可以知道它存放在 eax 寄存器中。
+
+    假如我们向打印字符到控制台，整个递归流程如下
+
+    user/hello.c/umain --> 
+    lib/printf.c/cprintf --> 
+    lib/printf.c/vcprintf --> 
+    lib/syscall.c/sys_cputs --> 
+    lib/syscall.c/syscall（将系统调用号放入 AX，五个参数依次放入 DX, CX, BX, DI, SI，然后执行指令 int 0x30 进入内核态，发生中断后，去IDT中查找中断处理函数） --> 
+    kern/trap.c/trap（将 Trapframe 结构直接赋值给当前 Env 结构中的 Trapframe ，这样进程下一次恢复运行将会从引起中断的地方之后第一条指令开始） --> 
+    kern/trap.c/trap_dispatch（根据中断号 0x30，又会调用 kern/syscall.c 中的 syscall 函数） --> 
+    kern/syscall.c/syscall --> 
+    kern/syscall.c/sys_cputs -->
+    kern/printf.c/cprintf --> 
+    kern/printf.c/vcprintf -->
+    kern/console.c/cputchar -->
+
+    当递归返回，到trap_dispatch()返回时，trap()会调用env_run(curenv)；该函数会将 curenv->env_tf 结构中保存的寄存器快照重新恢复到寄存器中，这样又会回到用户程序系统调用之后的那条指令运行（在本例中，就算打印完字符之后的第一条指令），只是这时候已经执行了系统调用并且寄存器eax中保存着系统调用的返回值。任务完成重新回到用户模式CPL=3。
+
+    我一开始很疑惑，在整个过程，好像没有改变什么全局变量来标记现在是用户态还是内核态？那是因为内核态和用户态区别在于权限级别，而调用门实现了在不同特权级之间实现受控的程序控制转移的功能，调用门通常仅用于使用特权级保护机制的操作系统中。
+
+    所以当前 Env 的 Trapframe 结构的 tf_cs 的前两位始终都是1，也就是用户级别权限。用户想要系统调用，那么只能通过调用门，在不改变当前进程的权限的情况下（如果系统调用会改变当前进程权限，那进程岂不是可以趁着这段时间为所欲为！！），辅助实现系统调用（也就是暂时进入了内核态，拥有了小部分用户态没有的权限）。
+    
+---
+
+## User-mode startup
+
+
+
+
+
+
 
 
 
