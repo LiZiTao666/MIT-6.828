@@ -6,6 +6,8 @@
 
 ## The PC's Physical Address Space
 
+![](15.jpg)
+
 ![](1.png)
 
 ![](2.png)

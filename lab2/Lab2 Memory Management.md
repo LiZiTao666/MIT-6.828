@@ -1,3 +1,21 @@
+# 本实验添加的重要文件
+    inc/memlayout.h     
+    describes the layout of the virtual address space that you must implement by modifying pmap.c. memlayout.h and pmap.h define the PageInfo structure that you'll use to keep track of which pages of physical memory are free.
+            
+    kern/pmap.c         
+    needs to read this device hardware in order to figure out how much physical memory there is, but that part of the code is done for you: you do not need to know the details of how the CMOS hardware works.
+
+    kern/pmap.h         
+    definitions 
+
+    kern/kclock.h       
+    manipulate the PC's battery-backed clock and CMOS RAM hardware, in which the BIOS records the amount of physical memory the PC contains, among other things.
+
+    kern/kclock.c       
+    manipulate the PC's battery-backed clock and CMOS RAM hardware, in which the BIOS records the amount of physical memory the PC contains, among other things.
+
+
+
 # Part 1: Physical Page Management
 
 你将编写一个内存管理代码。主要分为两大部分。分别对物理内存和虚拟内存的管理。

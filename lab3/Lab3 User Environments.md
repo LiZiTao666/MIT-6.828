@@ -7,6 +7,49 @@
 
 注意：本实验指的用户环境和UNIX中的进程是一个概念！！！！！！！之所有没有使用进程是强调JOS的用户环境和UNIX进程将提供不同的接口。
 
+# 本实验添加的重要文件
+    inc/env.h	    
+    Public definitions for user-mode environments
+    inc/trap.h	    
+    Public definitions for trap handling
+    inc/syscall.h	
+    Public definitions for system calls from user environments to the kernel
+    inc/lib.h	    
+    Public definitions for the user-mode support library
+
+    kern/env.h	    
+    Kernel-private definitions for user-mode environments
+    kern/env.c	    
+    Kernel code implementing user-mode environments
+    kern/trap.h	    
+    Kernel-private trap handling definitions
+    kern/trap.c	    
+    Trap handling code
+    kern/trapentry.S	
+    Assembly-language trap handler entry-points
+    kern/syscall.h	
+    Kernel-private definitions for system call handling
+    kern/syscall.c	
+    System call implementation code
+
+    lib/Makefrag	
+    Makefile fragment to build user-mode library, obj/lib/libjos.a
+    lib/entry.S	   
+    Assembly-language entry-point for user environments
+    lib/libmain.c	
+    User-mode library setup code called from entry.S
+    lib/syscall.c	
+    User-mode system call stub functions
+    lib/console.c	
+    User-mode implementations of putchar and getchar, providing console I/O
+    lib/exit.c	    
+    User-mode implementation of exit
+    lib/panic.c	    
+    User-mode implementation of panic
+
+    user/*
+    Various test programs to check kernel lab 3 code
+
 # Part A: User Environments and Exception Handling
 
     typedef int32_t envid_t; //用户环境ID变量，32位的。
@@ -183,6 +226,8 @@ env_create内部函数调用
 > 
 > * https://www.cnblogs.com/midhillzhou/p/5620831.html
 
+---
+
 ## Basics of Protected Control Transfer
 
 异常(Exception)和中断(Interrupts)都是“受到保护的控制转移方法”，都会使处理器从用户态转移为内核态（CPL = 0），而不给用户模式代码任何机会来干扰内核或其他环境的运行。在Intel的术语中，中断指的是由外部异步事件引起的处理器控制权转移，比如外部IO设备发送来的中断信号。相反，异常则是由于当前正在运行的指令所带来的同步的处理器控制权的转移，比如访问无效内存，或者除零溢出。
@@ -202,6 +247,14 @@ env_create内部函数调用
 
    虽然TSS很大，并且可能有多种用途，但Jos只使用它来定义处理器在从用户模式转换到内核模式时应该切换到的内核堆栈。由于Jos中的“内核模式”在x86上的特权级别为0，处理器只使用TSS的ESP0和SS0字段来定义内核堆栈，而不使用其它字段。
 
+![](16.jpg)
+
+![](17.png)
+
+---
+
+## 寄存器
+
 到目前我们已经碰到很多除通用寄存器之外的寄存器了，下图总结了各种寄存器：
 
 ![](5.png)
@@ -218,6 +271,8 @@ env_create内部函数调用
 X86处理器内部生成的所有同步异常都使用0到31之间的中断向量，因此映射到IDT项0-31。例如，缺页中断就是14号。大于31的中断向量使用于软件中断，软件中断可以由int指令生成，或者在外部设备需要注意时由外部设备引起异步硬件中断。
 
 在本节中，我们将扩展Jos以处理内部生成的x86异常向量0-31。在下一节中，我们将使用Jos处理软件中断向量48(0x30)，Jos(相当任意)使用其作为系统调用中断向量。在实验4中，我们将扩展Jos以处理外部生成的硬件中断，例如时钟中断。
+
+异常（Exceptions）与中断（Interrupts）均被视作受保护状态转移，中断异步触发（设置IO），异常同步触发（除零|无效内存访问）
 
 ---
 
@@ -275,6 +330,8 @@ X86处理器内部生成的所有同步异常都使用0到31之间的中断向�
     地址12到24处的是x86硬件定义的。
     地址28到68处的是我们自己写的代码压入的堆栈。
     为什么要这样压入堆栈，因为这刚好和Trapframe的定义对上了，可以查看源码。
+
+![](15.png)
 
 ---
 

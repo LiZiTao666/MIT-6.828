@@ -15,14 +15,16 @@ https://pdos.csail.mit.edu/6.828/2018/readings/i386/toc.htm
 ## 实验主要参考文章（排名不分先后）：
 
 1. https://blog.csdn.net/tailuzhecom
-2. https://www.cnblogs.com/sssaltyfish/category/1436900.html
-3. https://www.cnblogs.com/gatsby123/tag/MIT%206.828/
-4. https://www.cnblogs.com/JayL-zxl/tag/mit/
-5. https://blog.csdn.net/qq_40871466/category_9634978.html
-6. https://blog.csdn.net/bysui
-7. https://blog.csdn.net/qq_32473685
-8. https://www.zhihu.com/column/c_1296388009823236096
-9. https://www.cnblogs.com/fatsheep9146/category/769143.html
+2. https://www.zhihu.com/people/alan-46-62/posts
+3. https://zhuanlan.zhihu.com/c_1273723917820215296
+4. https://www.cnblogs.com/sssaltyfish/category/1436900.html
+5. https://www.cnblogs.com/gatsby123/tag/MIT%206.828/
+6. https://www.cnblogs.com/JayL-zxl/tag/mit/
+7. https://blog.csdn.net/qq_40871466/category_9634978.html
+8. https://blog.csdn.net/bysui
+9. https://blog.csdn.net/qq_32473685
+10. https://www.zhihu.com/column/c_1296388009823236096
+11. https://www.cnblogs.com/fatsheep9146/category/769143.html
 
 ---
 
