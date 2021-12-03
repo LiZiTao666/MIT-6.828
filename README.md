@@ -30,7 +30,7 @@ https://pdos.csail.mit.edu/6.828/2018/readings/i386/toc.htm
 
 ## 补充资料
 
-分段：由于本实验将虚拟地址转换为物理地址只采用分页，没有采用分段（但是有很多其它地方还是用到了分段），所以在这里补充一些资料
+分段：实际上本实验只采用分页，没有采用分段（每个段的base都被设置为0，limit为最大值，所有空间被看作一个大段）
 1. https://www.cnblogs.com/chenwb89/p/operating_system_003.html
 2. https://www.cnblogs.com/mdumpling/p/8494806.html
 3. https://www.yiibai.com/os/os-segmentation.html
